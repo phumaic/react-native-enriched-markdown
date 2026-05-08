@@ -4,20 +4,20 @@ appId: swmansion.enriched.markdown.example
 - launchApp
 
 - runFlow:
-    file: '../../subflows/move_to_playground.yaml'
+    file: '../../../../subflows/move_to_playground.yaml'
 
 - runFlow:
-    file: '../subflows/set_enriched_text_value.yaml'
+    file: '../../../subflows/set_enriched_text_value.yaml'
     env:
       VALUE: |
         - Apples
         - Bananas
-        - Cherries
+        - Mango
         * Dragonfruit
-        * Elderberry
+        * Guava
         * Fig
 
 - runFlow:
-    file: '../subflows/capture_or_assert_screenshot.yaml'
+    file: '../../../subflows/capture_or_assert_screenshot.yaml'
     env:
       SCREENSHOT_NAME: 'unordered_list_display'
