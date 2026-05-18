@@ -765,6 +765,32 @@ static char kENRMSegmentFadeAnimatorKey;
   }
 }
 
+- (void)prepareForRecycle
+{
+  [_renderCoordinator invalidate];
+
+  for (RCTUIView *segment in _segmentViews) {
+    if ([segment isKindOfClass:[EnrichedMarkdownInternalText class]]) {
+      EnrichedMarkdownInternalText *textSegment = (EnrichedMarkdownInternalText *)segment;
+      ENRMTailFadeInAnimator *animator = objc_getAssociatedObject(textSegment.textView, &kENRMSegmentFadeAnimatorKey);
+      [animator cancel];
+      objc_setAssociatedObject(textSegment.textView, &kENRMSegmentFadeAnimatorKey, nil,
+                               OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    [segment removeFromSuperview];
+  }
+  [_segmentViews removeAllObjects];
+  [_segmentSignatures removeAllObjects];
+
+  _cachedMarkdown = nil;
+  _renderedMarkdown = nil;
+  _streamingAnimation = NO;
+  _tableStreamingMode = ENRMTableStreamingModeHidden;
+  _dirtyFlags = ENRMDirtyNone;
+
+  [super prepareForRecycle];
+}
+
 Class<RCTComponentViewProtocol> EnrichedMarkdownCls(void)
 {
   return EnrichedMarkdown.class;
