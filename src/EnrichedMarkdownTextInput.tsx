@@ -31,6 +31,7 @@ export type {
 import type {
   HostInstance,
   NativeSyntheticEvent,
+  ViewProps,
   ViewStyle,
   TextStyle,
   ColorValue,
@@ -111,7 +112,8 @@ export interface EnrichedMarkdownTextInputInstance {
   getCaretRect: () => Promise<CaretRect>;
 }
 
-export interface EnrichedMarkdownTextInputProps {
+export interface EnrichedMarkdownTextInputProps
+  extends Omit<ViewProps, 'style'> {
   ref?: RefObject<EnrichedMarkdownTextInputInstance | null>;
   defaultValue?: string;
   placeholder?: string;
@@ -183,6 +185,7 @@ export const EnrichedMarkdownTextInput = ({
   onBlur,
   contextMenuItems,
   linkRegex: _linkRegex,
+  ...rest
 }: EnrichedMarkdownTextInputProps) => {
   const nativeRef = useRef<NativeRef | null>(null);
 
@@ -405,6 +408,7 @@ export const EnrichedMarkdownTextInput = ({
 
   return (
     <EnrichedMarkdownTextInputNativeComponent
+      {...rest}
       ref={nativeRef}
       style={style}
       markdownStyle={normalizedStyle}
