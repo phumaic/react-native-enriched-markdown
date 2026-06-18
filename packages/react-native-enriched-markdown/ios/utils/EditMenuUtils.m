@@ -9,6 +9,7 @@ static NSString *const kMenuIdentifierStandardEdit = @"com.apple.menu.standard-e
 static NSString *const kActionIdentifierCopy = @"com.swmansion.enriched.markdown.copy";
 static NSString *const kActionIdentifierCopyMarkdown = @"com.swmansion.enriched.markdown.copyMarkdown";
 static NSString *const kActionIdentifierCopyImageURL = @"com.swmansion.enriched.markdown.copyImageURL";
+static NSString *const kActionIdentifierSelectAll = @"com.swmansion.enriched.markdown.selectAll";
 
 static UIAction *createCopyAction(NSAttributedString *selectedText, NSString *markdown, StyleConfig *styleConfig)
 {
@@ -47,13 +48,48 @@ static UIAction *_Nullable createCopyImageURLAction(NSArray<NSString *> *imageUR
                            handler:^(__kindof UIAction *action) { copyStringToPasteboard(urlsToCopy); }];
 }
 
-static UIMenu *createEnhancedStandardEditMenu(UIMenu *originalMenu, UIAction *copyAction)
+// Selects the entire content of the text view. iOS strips the system "Select All"
+// action when we rebuild the standard-edit submenu, so we recreate it here. The
+// text view is held weakly to avoid retaining it through the menu's lifetime.
+static UIAction *_Nullable createSelectAllAction(ENRMPlatformTextView *_Nullable textView, NSAttributedString *text,
+                                                 NSRange range)
 {
+  // Nothing to add when there is no text view or the whole text is already selected.
+  if (textView == nil || range.length >= text.length) {
+    return nil;
+  }
+
+  __weak ENRMPlatformTextView *weakTextView = textView;
+  return [UIAction actionWithTitle:@"Select All"
+                             image:nil
+                        identifier:kActionIdentifierSelectAll
+                           handler:^(__kindof UIAction *action) {
+                             ENRMPlatformTextView *strongTextView = weakTextView;
+                             if (strongTextView == nil) {
+                               return;
+                             }
+                             // Set the full document range directly: `selectAll:` is a no-op on
+                             // non-editable text views, but assigning `selectedTextRange` works
+                             // regardless of editability.
+                             UITextRange *fullRange =
+                                 [strongTextView textRangeFromPosition:strongTextView.beginningOfDocument
+                                                            toPosition:strongTextView.endOfDocument];
+                             strongTextView.selectedTextRange = fullRange;
+                           }];
+}
+
+static UIMenu *createEnhancedStandardEditMenu(UIMenu *originalMenu, UIAction *copyAction,
+                                              UIAction *_Nullable selectAllAction)
+{
+  NSMutableArray<UIMenuElement *> *children = [NSMutableArray arrayWithObject:copyAction];
+  if (selectAllAction) {
+    [children addObject:selectAllAction];
+  }
   return [UIMenu menuWithTitle:originalMenu.title
                          image:originalMenu.image
                     identifier:originalMenu.identifier
                        options:originalMenu.options
-                      children:@[ copyAction ]];
+                      children:children];
 }
 
 static void addOptionalAction(NSMutableArray<UIMenuElement *> *array, UIAction *_Nullable action)
@@ -71,8 +107,9 @@ static void insertOptionalAction(NSMutableArray<UIMenuElement *> *array, UIActio
 }
 
 // TODO: Remove API_AVAILABLE(ios(16.0)) guard when the minimum iOS deployment target in RN is bumped to 16.
-UIMenu *buildEditMenuForSelection(NSAttributedString *attributedText, NSRange range, NSString *_Nullable cachedMarkdown,
-                                  StyleConfig *styleConfig, NSArray<UIMenuElement *> *suggestedActions,
+UIMenu *buildEditMenuForSelection(ENRMPlatformTextView *_Nullable textView, NSAttributedString *attributedText,
+                                  NSRange range, NSString *_Nullable cachedMarkdown, StyleConfig *styleConfig,
+                                  NSArray<UIMenuElement *> *suggestedActions,
                                   NSArray<UIAction *> *_Nullable customActions,
                                   ENRMSelectionMenuConfig selectionMenuConfig) API_AVAILABLE(ios(16.0))
 {
@@ -83,6 +120,7 @@ UIMenu *buildEditMenuForSelection(NSAttributedString *attributedText, NSRange ra
   UIAction *copyAction = createCopyAction(selectedText, markdown, styleConfig);
   UIAction *copyMarkdownAction = selectionMenuConfig.copyAsMarkdown ? createCopyMarkdownAction(markdown) : nil;
   UIAction *copyImageURLAction = selectionMenuConfig.copyImageURL ? createCopyImageURLAction(imageURLs) : nil;
+  UIAction *selectAllAction = createSelectAllAction(textView, attributedText, range);
 
   NSMutableArray<UIMenuElement *> *result = [NSMutableArray array];
   BOOL foundStandardEditMenu = NO;
@@ -92,8 +130,9 @@ UIMenu *buildEditMenuForSelection(NSAttributedString *attributedText, NSRange ra
       UIMenu *menu = (UIMenu *)element;
 
       if ([menu.identifier isEqualToString:kMenuIdentifierStandardEdit]) {
-        // Replace standard Copy with our enhanced version
-        [result addObject:createEnhancedStandardEditMenu(menu, copyAction)];
+        // Replace standard Copy with our enhanced version, re-adding Select All
+        // which iOS drops when the submenu is rebuilt.
+        [result addObject:createEnhancedStandardEditMenu(menu, copyAction, selectAllAction)];
         addOptionalAction(result, copyMarkdownAction);
         addOptionalAction(result, copyImageURLAction);
         foundStandardEditMenu = YES;
@@ -105,7 +144,11 @@ UIMenu *buildEditMenuForSelection(NSAttributedString *attributedText, NSRange ra
 
   if (!foundStandardEditMenu) {
     [result insertObject:copyAction atIndex:0];
-    insertOptionalAction(result, copyMarkdownAction, 1);
+    NSUInteger nextIndex = 1;
+    if (selectAllAction) {
+      [result insertObject:selectAllAction atIndex:nextIndex++];
+    }
+    insertOptionalAction(result, copyMarkdownAction, nextIndex);
     addOptionalAction(result, copyImageURLAction);
   }
 

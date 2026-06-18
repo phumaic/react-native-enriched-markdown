@@ -582,8 +582,9 @@ static char kENRMSegmentFadeAnimatorKey;
                                 selectionStart:selectionStart
                                   selectionEnd:selectionEnd];
         });
-    return buildEditMenuForSelection(textView.textStorage, textView.selectedRange, segmentMarkdown, strongSelf->_config,
-                                     @[ baseMenu ], customItems, strongSelf->_selectionMenuConfig);
+    return buildEditMenuForSelection(textView, textView.textStorage, textView.selectedRange, segmentMarkdown,
+                                     strongSelf->_config, @[ baseMenu ], customItems,
+                                     strongSelf -> _selectionMenuConfig);
   }];
 #endif
 
@@ -1039,7 +1040,7 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownCls(void)
       ENRMBuildContextMenuActions(_contextMenuItemTexts, _contextMenuItemIcons, textView, range, handler);
 
   NSString *segmentMarkdown = extractMarkdownFromAttributedString(textView.attributedText, range);
-  return buildEditMenuForSelection(textView.attributedText, range, segmentMarkdown, _config, suggestedActions,
+  return buildEditMenuForSelection(textView, textView.attributedText, range, segmentMarkdown, _config, suggestedActions,
                                    customActions, _selectionMenuConfig);
 }
 

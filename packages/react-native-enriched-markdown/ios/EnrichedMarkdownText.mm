@@ -249,8 +249,9 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
                                 selectionStart:selectionStart
                                   selectionEnd:selectionEnd];
         });
-    return buildEditMenuForSelection(textView.textStorage, textView.selectedRange, strongSelf->_cachedMarkdown,
-                                     strongSelf->_config, @[ baseMenu ], customItems, strongSelf->_selectionMenuConfig);
+    return buildEditMenuForSelection(textView, textView.textStorage, textView.selectedRange,
+                                     strongSelf->_cachedMarkdown, strongSelf->_config, @[ baseMenu ], customItems,
+                                     strongSelf -> _selectionMenuConfig);
   };
 #endif
 
@@ -736,7 +737,7 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownTextCls(void)
   NSMutableArray<UIAction *> *customActions =
       ENRMBuildContextMenuActions(_contextMenuItemTexts, _contextMenuItemIcons, textView, range, handler);
 
-  return buildEditMenuForSelection(textView.attributedText, range, _cachedMarkdown, _config, suggestedActions,
+  return buildEditMenuForSelection(textView, textView.attributedText, range, _cachedMarkdown, _config, suggestedActions,
                                    customActions, _selectionMenuConfig);
 }
 #endif
