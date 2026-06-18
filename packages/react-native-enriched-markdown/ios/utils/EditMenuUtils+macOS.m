@@ -7,11 +7,14 @@
 
 #if TARGET_OS_OSX
 
-NSMenu *_Nullable buildEditMenuForSelection(NSAttributedString *attributedText, NSRange range,
-                                            NSString *_Nullable cachedMarkdown, StyleConfig *styleConfig,
+NSMenu *_Nullable buildEditMenuForSelection(NSTextView *_Nullable textView, NSAttributedString *attributedText,
+                                            NSRange range, NSString *_Nullable cachedMarkdown, StyleConfig *styleConfig,
                                             NSArray *suggestedActions, NSArray<NSMenuItem *> *_Nullable customItems,
                                             ENRMSelectionMenuConfig selectionMenuConfig)
 {
+  // `textView` is unused on macOS: NSTextView's system context menu already
+  // includes "Select All", which we preserve by editing the base menu in place.
+  (void)textView;
   NSMenu *menu = ([suggestedActions.firstObject isKindOfClass:[NSMenu class]]) ? (NSMenu *)suggestedActions.firstObject
                                                                                : [[NSMenu alloc] initWithTitle:@""];
 
