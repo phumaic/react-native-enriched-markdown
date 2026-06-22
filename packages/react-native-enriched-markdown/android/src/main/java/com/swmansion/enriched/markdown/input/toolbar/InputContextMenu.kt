@@ -16,10 +16,26 @@ import com.swmansion.enriched.markdown.input.model.StyleType
 
 // TODO: Wrap all user-facing strings for localization support.
 
+data class InputSelectionMenuConfig(
+  val format: Boolean = true,
+  val copyAsMarkdown: Boolean = true,
+)
+
+data class FormatMenuConfig(
+  val bold: Boolean = true,
+  val italic: Boolean = true,
+  val underline: Boolean = true,
+  val strikethrough: Boolean = true,
+  val spoiler: Boolean = true,
+  val link: Boolean = true,
+)
+
 class InputContextMenu(
   private val view: EnrichedMarkdownTextInputView,
 ) {
   private var customItemTexts: List<String> = emptyList()
+  var selectionMenuConfig: InputSelectionMenuConfig = InputSelectionMenuConfig()
+  var formatMenuConfig: FormatMenuConfig = FormatMenuConfig()
 
   fun setContextMenuItems(items: List<String>) {
     customItemTexts = items
@@ -42,13 +58,19 @@ class InputContextMenu(
           menu.removeGroup(FORMAT_MENU_GROUP_ID)
           menu.removeGroup(CUSTOM_MENU_GROUP_ID)
 
-          val formatSubMenu = menu.addSubMenu(FORMAT_MENU_GROUP_ID, MENU_FORMAT_ID, 100, "Format")
-          FORMAT_ITEMS.forEachIndexed { index, (title, _) ->
-            formatSubMenu.add(Menu.NONE, MENU_FORMAT_ITEM_BASE + index, index, title)
+          if (selectionMenuConfig.format) {
+            val formatSubMenu = menu.addSubMenu(FORMAT_MENU_GROUP_ID, MENU_FORMAT_ID, 100, "Format")
+            FORMAT_ITEMS.forEachIndexed { index, (title, styleType) ->
+              if (isFormatItemVisible(styleType)) {
+                formatSubMenu.add(Menu.NONE, MENU_FORMAT_ITEM_BASE + index, index, title)
+              }
+            }
           }
 
           if (view.selectionStart < view.selectionEnd) {
-            menu.add(FORMAT_MENU_GROUP_ID, MENU_COPY_MARKDOWN_ID, 101, "Copy as Markdown")
+            if (selectionMenuConfig.copyAsMarkdown) {
+              menu.add(FORMAT_MENU_GROUP_ID, MENU_COPY_MARKDOWN_ID, 101, "Copy as Markdown")
+            }
 
             customItemTexts.forEachIndexed { index, text ->
               menu
@@ -95,6 +117,16 @@ class InputContextMenu(
         override fun onDestroyActionMode(mode: ActionMode) {}
       }
   }
+
+  private fun isFormatItemVisible(styleType: StyleType): Boolean =
+    when (styleType) {
+      StyleType.BOLD -> formatMenuConfig.bold
+      StyleType.ITALIC -> formatMenuConfig.italic
+      StyleType.UNDERLINE -> formatMenuConfig.underline
+      StyleType.STRIKETHROUGH -> formatMenuConfig.strikethrough
+      StyleType.SPOILER -> formatMenuConfig.spoiler
+      StyleType.LINK -> formatMenuConfig.link
+    }
 
   private fun applyFormat(styleType: StyleType) {
     val start = view.selectionStart
