@@ -122,9 +122,10 @@ static NSString *const kActionIdentifierCopyMarkdown = @"com.swmansion.enriched.
 static NSString *const kActionIdentifierCopyImageURL = @"com.swmansion.enriched.markdown.copyImageURL";
 static NSString *const kActionIdentifierSelectAll = @"com.swmansion.enriched.markdown.selectAll";
 
-static UIAction *createCopyAction(NSAttributedString *selectedText, NSString *markdown, StyleConfig *styleConfig)
+static UIAction *createCopyAction(NSAttributedString *selectedText, NSString *markdown, StyleConfig *styleConfig,
+                                  NSString *copyLabel)
 {
-  return [UIAction actionWithTitle:@"Copy"
+  return [UIAction actionWithTitle:copyLabel
                              image:[RCTUIImage systemImageNamed:@"doc.on.doc"]
                         identifier:kActionIdentifierCopy
                            handler:^(__kindof UIAction *action) {
@@ -132,26 +133,25 @@ static UIAction *createCopyAction(NSAttributedString *selectedText, NSString *ma
                            }];
 }
 
-static UIAction *_Nullable createCopyMarkdownAction(NSString *markdown)
+static UIAction *_Nullable createCopyMarkdownAction(NSString *markdown, NSString *copyAsMarkdownLabel)
 {
   if (markdown.length == 0)
     return nil;
 
-  return [UIAction actionWithTitle:@"Copy as Markdown"
+  return [UIAction actionWithTitle:copyAsMarkdownLabel
                              image:[RCTUIImage systemImageNamed:@"doc.text"]
                         identifier:kActionIdentifierCopyMarkdown
                            handler:^(__kindof UIAction *action) { copyStringToPasteboard(markdown); }];
 }
 
-static UIAction *_Nullable createCopyImageURLAction(NSArray<NSString *> *imageURLs)
+static UIAction *_Nullable createCopyImageURLAction(NSArray<NSString *> *imageURLs,
+                                                    ENRMSelectionMenuConfig selectionMenuConfig)
 {
   if (imageURLs.count == 0)
     return nil;
 
   NSString *urlsToCopy = [imageURLs componentsJoinedByString:@"\n"];
-  NSString *title = (imageURLs.count == 1)
-                        ? @"Copy Image URL"
-                        : [NSString stringWithFormat:@"Copy %lu Image URLs", (unsigned long)imageURLs.count];
+  NSString *title = ENRMResolveImageURLsTitle(selectionMenuConfig, imageURLs.count);
 
   return [UIAction actionWithTitle:title
                              image:[RCTUIImage systemImageNamed:@"link"]
@@ -241,9 +241,12 @@ UIMenu *buildEditMenuForSelection(ENRMPlatformTextView *_Nullable textView, NSAt
   NSString *markdown = markdownForRange(attributedText, range, cachedMarkdown);
   NSArray<NSString *> *imageURLs = imageURLsInRange(attributedText, range);
 
-  UIAction *copyAction = createCopyAction(selectedText, markdown, styleConfig);
-  UIAction *copyMarkdownAction = selectionMenuConfig.copyAsMarkdown ? createCopyMarkdownAction(markdown) : nil;
-  UIAction *copyImageURLAction = selectionMenuConfig.copyImageURL ? createCopyImageURLAction(imageURLs) : nil;
+  UIAction *copyAction = createCopyAction(selectedText, markdown, styleConfig, selectionMenuConfig.copyLabel);
+  UIAction *copyMarkdownAction = selectionMenuConfig.copyAsMarkdown
+                                     ? createCopyMarkdownAction(markdown, selectionMenuConfig.copyAsMarkdownLabel)
+                                     : nil;
+  UIAction *copyImageURLAction =
+      selectionMenuConfig.copyImageURL ? createCopyImageURLAction(imageURLs, selectionMenuConfig) : nil;
 
   // Provider used to rebuild this menu for the full selection when "Select All"
   // re-presents it. Re-entrant: for the full range createSelectAllAction returns

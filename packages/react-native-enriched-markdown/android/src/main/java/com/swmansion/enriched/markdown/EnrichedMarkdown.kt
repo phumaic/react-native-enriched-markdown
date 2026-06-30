@@ -232,6 +232,31 @@ class EnrichedMarkdown
       segmentViews.filterIsInstance<EnrichedMarkdownInternalText>().forEach {
         it.selectionMenuConfig = config
       }
+      // Table and math views cache the copy labels, so re-push them on update
+      // (e.g. a language change without a remount) to avoid stale labels.
+      pushCopyLabelsToBlockSegments()
+    }
+
+    private fun pushCopyLabelsToBlockSegments() {
+      val copyLabel = selectionMenuConfig.copyLabel
+      val copyAsMarkdownLabel = selectionMenuConfig.copyAsMarkdownLabel
+      segmentViews.forEach { view ->
+        when {
+          view is TableContainerView -> {
+            view.copyLabel = copyLabel
+            view.copyAsMarkdownLabel = copyAsMarkdownLabel
+          }
+
+          isMathContainerView(view) -> {
+            runCatching {
+              view.javaClass.getMethod("setCopyLabel", String::class.java).invoke(view, copyLabel)
+              view.javaClass
+                .getMethod("setCopyAsMarkdownLabel", String::class.java)
+                .invoke(view, copyAsMarkdownLabel)
+            }
+          }
+        }
+      }
     }
 
     private fun forwardContextMenuItemPress(
@@ -463,6 +488,8 @@ class EnrichedMarkdown
       maxFontSizeMultiplier = this@EnrichedMarkdown.maxFontSizeMultiplier
       onLinkPress = onLinkPressCallback
       onLinkLongPress = onLinkLongPressCallback
+      copyLabel = this@EnrichedMarkdown.selectionMenuConfig.copyLabel
+      copyAsMarkdownLabel = this@EnrichedMarkdown.selectionMenuConfig.copyAsMarkdownLabel
       applyTableNode(segment.node)
     }
 
@@ -477,6 +504,12 @@ class EnrichedMarkdown
           resolvedClass
             .getConstructor(Context::class.java, StyleConfig::class.java)
             .newInstance(context, style) as View
+        resolvedClass
+          .getMethod("setCopyLabel", String::class.java)
+          .invoke(view, selectionMenuConfig.copyLabel)
+        resolvedClass
+          .getMethod("setCopyAsMarkdownLabel", String::class.java)
+          .invoke(view, selectionMenuConfig.copyAsMarkdownLabel)
         resolvedClass.getMethod("applyLatex", String::class.java).invoke(view, segment.latex)
         view
       } catch (e: Exception) {
