@@ -51,12 +51,16 @@ class LinkLongPressMovementMethod : LinkMovementMethod() {
       MotionEvent.ACTION_UP -> {
         cancelLongPress()
         isLinkTouchActive = false
-        if (widget.hasSelection()) {
-          Selection.removeSelection(buffer)
-        }
         if (handleSpoilerTap(widget, buffer, event)) {
           Selection.removeSelection(buffer)
           return true
+        }
+        // Tapping inside the current selection keeps it (so the system's floating
+        // selection toolbar stays available) instead of clearing it; this mirrors
+        // the iOS tap-to-toggle behaviour where a tap on the selection no longer
+        // deselects the text. Tapping outside the selection clears it as before.
+        if (widget.hasSelection() && !isTapInsideSelection(widget, buffer, event)) {
+          Selection.removeSelection(buffer)
         }
       }
 
@@ -125,6 +129,22 @@ class LinkLongPressMovementMethod : LinkMovementMethod() {
   ): LinkSpan? {
     val offset = charOffsetAt(widget, event) ?: return null
     return buffer.getSpans(offset, offset, LinkSpan::class.java).firstOrNull()
+  }
+
+  /**
+   * Whether the tap landed within the current selection (and not on a link, which
+   * should still be followed). Used to keep the selection on tap instead of
+   * clearing it.
+   */
+  private fun isTapInsideSelection(
+    widget: TextView,
+    buffer: Spannable,
+    event: MotionEvent,
+  ): Boolean {
+    if (!widget.hasSelection()) return false
+    if (findLinkSpan(widget, buffer, event) != null) return false
+    val offset = charOffsetAt(widget, event) ?: return false
+    return offset >= widget.selectionStart && offset < widget.selectionEnd
   }
 
   private fun handleSpoilerTap(
