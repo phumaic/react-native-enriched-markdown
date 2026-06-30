@@ -11,6 +11,7 @@ import com.swmansion.enriched.markdown.spoiler.SpoilerCapable
 import com.swmansion.enriched.markdown.spoiler.SpoilerOverlay
 import com.swmansion.enriched.markdown.spoiler.SpoilerOverlayDrawer
 import com.swmansion.enriched.markdown.utils.text.interaction.CheckboxTouchHelper
+import com.swmansion.enriched.markdown.utils.text.interaction.SelectionTapHelper
 import com.swmansion.enriched.markdown.utils.text.view.LinkLongPressMovementMethod
 import com.swmansion.enriched.markdown.utils.text.view.SelectionMenuConfig
 import com.swmansion.enriched.markdown.utils.text.view.applySelectableState
@@ -32,6 +33,7 @@ class EnrichedMarkdownInternalText
     var lastElementMarginBottom: Float = 0f
 
     private val checkboxTouchHelper = CheckboxTouchHelper(this)
+    private val selectionTapHelper = SelectionTapHelper(this)
 
     var onTaskListItemPressCallback: ((taskIndex: Int, checked: Boolean, itemText: String) -> Unit)?
       get() = checkboxTouchHelper.onCheckboxTap
@@ -100,6 +102,11 @@ class EnrichedMarkdownInternalText
         if (event.action == MotionEvent.ACTION_DOWN) {
           cancelJSTouchForCheckboxTap(event)
         }
+        return true
+      }
+      // Keep the selection alive when tapping inside it (consumes the tap-up before
+      // the editor can clear it). Mirrors the iOS tap-to-toggle behaviour.
+      if (selectionTapHelper.onTouchEvent(event)) {
         return true
       }
       val result = super.onTouchEvent(event)

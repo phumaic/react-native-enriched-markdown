@@ -3,11 +3,17 @@
 #import "FontUtils.h"
 #import "MarkdownASTNode.h"
 #import "ParagraphStyleUtils.h"
+#import "RenderContext.h"
 #import "RendererFactory.h"
 #import "StyleConfig.h"
 
 static NSString *const kNestedInfoDepthKey = @"depth";
 static NSString *const kNestedInfoRangeKey = @"range";
+
+// Inner vertical padding (points) is shared via ENRMBlockquotePaddingVertical in
+// BlockquoteBorder.h, so trailing-trim and measurement stay in sync. Applied to
+// the outermost level only.
+static const CGFloat kBlockquotePaddingVertical = ENRMBlockquotePaddingVertical;
 
 @implementation BlockquoteRenderer
 
@@ -34,7 +40,7 @@ static NSString *const kNestedInfoRangeKey = @"range";
     return;
   }
 
-  [self applyStylingAndSpacing:output start:start end:end currentDepth:currentDepth];
+  [self applyStylingAndSpacing:output start:start end:end currentDepth:currentDepth context:context];
 }
 
 #pragma mark - Styling and Spacing
@@ -43,6 +49,7 @@ static NSString *const kNestedInfoRangeKey = @"range";
                          start:(NSUInteger)start
                            end:(NSUInteger)end
                   currentDepth:(NSInteger)currentDepth
+                       context:(RenderContext *)context
 {
   NSUInteger contentStart = start;
   if (currentDepth == 0) {
@@ -66,8 +73,72 @@ static NSString *const kNestedInfoRangeKey = @"range";
   [self reapplyNestedStyles:output nestedInfo:nestedInfo levelSpacing:levelSpacing];
 
   if (currentDepth == 0) {
+    [self applyInnerVerticalPadding:output range:blockquoteRange context:context];
     applyBlockSpacingAfter(output, [_config blockquoteMarginBottom]);
   }
+}
+
+#pragma mark - Inner Vertical Padding
+
+// Adds top and bottom inner padding as dedicated spacer lines that carry the
+// blockquote depth/background attributes, so the border-and-background drawing
+// extends over them (mirrors how the code block renderer pads its background).
+//
+// The bottom spacer must occupy its own line fragment, so when the content does
+// not already end in a newline we first terminate the content paragraph. The
+// caller appends the bottom margin newline after this, which keeps the bottom
+// spacer from becoming the layout's non-enumerated "extra line fragment" when
+// the blockquote is the document's last element (otherwise it would not draw).
+- (void)applyInnerVerticalPadding:(NSMutableAttributedString *)output
+                            range:(NSRange)blockquoteRange
+                          context:(RenderContext *)context
+{
+  CGFloat padding = kBlockquotePaddingVertical;
+  if (padding <= 0 || blockquoteRange.length == 0) {
+    return;
+  }
+
+  RCTUIColor *backgroundColor = [_config blockquoteBackgroundColor];
+  NSWritingDirection writingDirection =
+      getOrCreateParagraphStyle(output, blockquoteRange.location).baseWritingDirection;
+  NSDictionary *spacerAttributes = [self spacerAttributesWithPadding:padding
+                                                     backgroundColor:backgroundColor
+                                                    writingDirection:writingDirection
+                                                             context:context];
+
+  // Bottom padding: terminate the content paragraph (keeping its attributes) so
+  // the spacer gets its own line fragment, then append the spacer line.
+  NSUInteger contentEnd = NSMaxRange(blockquoteRange);
+  if ([output.string characterAtIndex:contentEnd - 1] != '\n') {
+    NSDictionary *terminatorAttributes = [output attributesAtIndex:contentEnd - 1 effectiveRange:NULL];
+    [output insertAttributedString:[[NSAttributedString alloc] initWithString:@"\n" attributes:terminatorAttributes]
+                           atIndex:contentEnd];
+    contentEnd += 1;
+  }
+  [output insertAttributedString:kNewlineAttributedString atIndex:contentEnd];
+  [output addAttributes:spacerAttributes range:NSMakeRange(contentEnd, 1)];
+
+  // Top padding: inserted before the content (shifts content down by one char,
+  // attributes already applied to the content move with it).
+  [output insertAttributedString:kNewlineAttributedString atIndex:blockquoteRange.location];
+  [output addAttributes:spacerAttributes range:NSMakeRange(blockquoteRange.location, 1)];
+}
+
+- (NSDictionary *)spacerAttributesWithPadding:(CGFloat)padding
+                              backgroundColor:(RCTUIColor *)backgroundColor
+                             writingDirection:(NSWritingDirection)writingDirection
+                                      context:(RenderContext *)context
+{
+  NSMutableParagraphStyle *spacerStyle = [context spacerStyleWithHeight:padding spacing:0];
+  spacerStyle.baseWritingDirection = writingDirection;
+
+  NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+  attributes[NSParagraphStyleAttributeName] = spacerStyle;
+  attributes[BlockquoteDepthAttributeName] = @(0);
+  if (backgroundColor) {
+    attributes[BlockquoteBackgroundColorAttributeName] = backgroundColor;
+  }
+  return attributes;
 }
 
 #pragma mark - Nested Blockquote Handling

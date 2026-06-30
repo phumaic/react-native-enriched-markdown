@@ -67,6 +67,12 @@ static inline CGSize ENRMMeasureMarkdownText(ENRMPlatformTextView *textView, CGF
     measuredHeight += [config codeBlockPadding];
   }
 
+  // The trailing bottom-padding spacer of a last-element blockquote becomes the
+  // non-measured extra line fragment, so reserve room for it explicitly.
+  if (isLastElementBlockquote(text)) {
+    measuredHeight += ENRMBlockquotePaddingVertical;
+  }
+
   if (allowTrailingMargin && lastElementMarginBottom > 0) {
     measuredHeight += lastElementMarginBottom;
   }

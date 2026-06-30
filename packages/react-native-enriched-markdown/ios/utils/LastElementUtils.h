@@ -1,4 +1,5 @@
 #pragma once
+#import "BlockquoteBorder.h"
 #import "ENRMUIKit.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -63,6 +64,25 @@ static inline BOOL isLastElementCodeBlock(NSAttributedString *text)
   NSRange codeBlockRange;
   [text attribute:CodeBlockAttributeName atIndex:lastContent.location effectiveRange:&codeBlockRange];
   return NSMaxRange(codeBlockRange) == text.length;
+}
+
+/**
+ * Checks whether the last visible element in the attributed string is a blockquote.
+ * Used so trailing-trim preserves the blockquote's bottom padding spacer and so
+ * measurement reserves room for it (iOS does not draw/measure trailing newlines
+ * with custom line heights).
+ */
+static inline BOOL isLastElementBlockquote(NSAttributedString *text)
+{
+  if (text.length == 0)
+    return NO;
+
+  NSRange lastContent = [text.string rangeOfCharacterFromSet:[[NSCharacterSet newlineCharacterSet] invertedSet]
+                                                     options:NSBackwardsSearch];
+  if (lastContent.location == NSNotFound)
+    return NO;
+
+  return [text attribute:BlockquoteDepthAttributeName atIndex:lastContent.location effectiveRange:nil] != nil;
 }
 
 /**

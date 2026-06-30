@@ -22,6 +22,7 @@ import com.swmansion.enriched.markdown.styles.StyleConfig
 import com.swmansion.enriched.markdown.utils.common.BreakStrategyUtils
 import com.swmansion.enriched.markdown.utils.text.TailFadeInAnimator
 import com.swmansion.enriched.markdown.utils.text.interaction.CheckboxTouchHelper
+import com.swmansion.enriched.markdown.utils.text.interaction.SelectionTapHelper
 import com.swmansion.enriched.markdown.utils.text.view.LinkLongPressMovementMethod
 import com.swmansion.enriched.markdown.utils.text.view.SelectionMenuConfig
 import com.swmansion.enriched.markdown.utils.text.view.applySelectableState
@@ -51,6 +52,7 @@ class EnrichedMarkdownText
     private var onLinkPressCallback: ((String) -> Unit)? = null
     private var onLinkLongPressCallback: ((String) -> Unit)? = null
     private val checkboxTouchHelper = CheckboxTouchHelper(this)
+    private val selectionTapHelper = SelectionTapHelper(this)
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
@@ -348,6 +350,11 @@ class EnrichedMarkdownText
         if (event.action == MotionEvent.ACTION_DOWN) {
           cancelJSTouchForCheckboxTap(event)
         }
+        return true
+      }
+      // Keep the selection alive when tapping inside it (consumes the tap-up before
+      // the editor can clear it). Mirrors the iOS tap-to-toggle behaviour.
+      if (selectionTapHelper.onTouchEvent(event)) {
         return true
       }
       val result = super.onTouchEvent(event)

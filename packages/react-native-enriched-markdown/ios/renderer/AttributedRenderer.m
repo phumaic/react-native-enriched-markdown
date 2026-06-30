@@ -1,4 +1,5 @@
 #import "AttributedRenderer.h"
+#import "BlockquoteBorder.h"
 #import "CodeBlockBackground.h"
 #import "LastElementUtils.h"
 #import "MarkdownASTNode.h"
@@ -110,6 +111,7 @@
   // 2. Trim trailing characters
   NSUInteger logicalEnd = NSMaxRange(lastContent);
   BOOL isCodeBlock = isLastBlockACodeBlock(output);
+  BOOL isBlockquote = !isCodeBlock && isLastElementBlockquote(output);
   NSRange codeRange = NSMakeRange(0, 0);
   if (isCodeBlock) {
     [output attribute:CodeBlockAttributeName
@@ -121,6 +123,15 @@
       [output appendAttributedString:kNewlineAttributedString];
     }
     logicalEnd = codeEnd + 1;
+  } else if (isBlockquote) {
+    // Preserve the blockquote's bottom padding spacer (it carries BlockquoteDepth);
+    // only the trailing margin newline(s) after it, which lack the attribute, are trimmed.
+    NSUInteger end = NSMaxRange(lastContent);
+    while (end < output.length && [output attribute:BlockquoteDepthAttributeName atIndex:end
+                                      effectiveRange:NULL] != nil) {
+      end++;
+    }
+    logicalEnd = end;
   }
 
   if (logicalEnd < output.length) {
@@ -139,8 +150,9 @@
     [output addAttribute:NSParagraphStyleAttributeName value:mutableStyle range:NSMakeRange(tailIdx, 1)];
   }
 
-  // 3. Zero out internal spacing for the last element (if not a code block)
-  if (!isCodeBlock) {
+  // 3. Zero out internal spacing for the last element (code blocks and blockquotes
+  // keep their internal padding)
+  if (!isCodeBlock && !isBlockquote) {
     NSRange styleRange;
     NSParagraphStyle *style = [output attribute:NSParagraphStyleAttributeName
                                         atIndex:lastContent.location

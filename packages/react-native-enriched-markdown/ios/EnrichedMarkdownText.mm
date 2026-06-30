@@ -49,6 +49,9 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
 - (void)renderMarkdownContent:(NSString *)markdownString;
 - (void)applyRenderedText:(NSMutableAttributedString *)attributedText;
 - (void)textTapped:(ENRMTapRecognizer *)recognizer;
+#if !TARGET_OS_OSX
+- (void)toggleEditMenuForTextView:(ENRMPlatformTextView *)textView;
+#endif
 - (void)setupLayoutManager;
 - (void)emitLinkPress:(NSString *)url;
 - (void)emitLinkLongPress:(NSString *)url;
@@ -693,7 +696,12 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownTextCls(void)
     return;
   }
 
-  ENRMHandleTapOnTextView(textView, recognizer, ^(NSString *url) { [self emitLinkPress:url]; });
+  void (^onTapInsideSelection)(void) = nil;
+#if !TARGET_OS_OSX
+  onTapInsideSelection = ^{ [self toggleEditMenuForTextView:textView]; };
+#endif
+  ENRMHandleTapOnTextView(
+      textView, recognizer, ^(NSString *url) { [self emitLinkPress:url]; }, onTapInsideSelection);
 }
 
 #pragma mark - UITextViewDelegate (Link Interaction)
@@ -721,9 +729,9 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownTextCls(void)
 #pragma mark - UITextViewDelegate (Edit Menu)
 
 // TODO: Remove API_AVAILABLE(ios(16.0)) guard when the minimum iOS deployment target in RN is bumped to 16.
-- (UIMenu *)textView:(ENRMPlatformTextView *)textView
-    editMenuForTextInRange:(NSRange)range
-          suggestedActions:(NSArray<UIMenuElement *> *)suggestedActions API_AVAILABLE(ios(16.0))
+- (UIMenu *)enrichedMenuForTextView:(ENRMPlatformTextView *)textView
+                              range:(NSRange)range
+                   suggestedActions:(NSArray<UIMenuElement *> *)suggestedActions API_AVAILABLE(ios(16.0))
 {
   __weak EnrichedMarkdownText *weakSelf = self;
   ENRMContextMenuPressHandler handler =
@@ -740,6 +748,35 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownTextCls(void)
 
   return buildEditMenuForSelection(textView, textView.attributedText, range, _cachedMarkdown, _config, suggestedActions,
                                    customActions, _selectionMenuConfig);
+}
+
+- (UIMenu *)textView:(ENRMPlatformTextView *)textView
+    editMenuForTextInRange:(NSRange)range
+          suggestedActions:(NSArray<UIMenuElement *> *)suggestedActions API_AVAILABLE(ios(16.0))
+{
+  return [self enrichedMenuForTextView:textView range:range suggestedActions:suggestedActions];
+}
+
+// Tapping inside the current selection keeps it and toggles the edit menu, rather
+// than clearing the selection (the default text-view behaviour).
+- (void)toggleEditMenuForTextView:(ENRMPlatformTextView *)textView
+{
+  if (@available(iOS 16.0, *)) {
+    if (ENRMEditMenuVisible(textView)) {
+      ENRMDismissEditMenu(textView);
+      return;
+    }
+    __weak EnrichedMarkdownText *weakSelf = self;
+    ENRMMenuProvider provider = ^UIMenu *_Nullable(NSArray<UIMenuElement *> *suggested)
+    {
+      EnrichedMarkdownText *strongSelf = weakSelf;
+      if (!strongSelf) {
+        return nil;
+      }
+      return [strongSelf enrichedMenuForTextView:textView range:textView.selectedRange suggestedActions:suggested];
+    };
+    ENRMPresentEditMenuForSelection(textView, provider);
+  }
 }
 #endif
 

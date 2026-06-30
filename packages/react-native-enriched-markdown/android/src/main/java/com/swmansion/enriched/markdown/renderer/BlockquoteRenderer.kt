@@ -1,6 +1,9 @@
 package com.swmansion.enriched.markdown.renderer
 
+import android.graphics.Paint
 import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.LineHeightSpan
 import com.swmansion.enriched.markdown.parser.MarkdownASTNode
 import com.swmansion.enriched.markdown.spans.BlockquoteSpan
 import com.swmansion.enriched.markdown.utils.text.span.SPAN_FLAGS_CONTAINER_BACKGROUND
@@ -8,6 +11,11 @@ import com.swmansion.enriched.markdown.utils.text.span.SPAN_FLAGS_EXCLUSIVE_EXCL
 import com.swmansion.enriched.markdown.utils.text.span.applyMarginBottom
 import com.swmansion.enriched.markdown.utils.text.span.applyMarginTop
 import com.swmansion.enriched.markdown.utils.text.span.createLineHeightSpan
+
+// Inner vertical padding (dp) between the blockquote background/border edges and
+// the text, so the quote does not look cramped. Matches the iOS value (8pt) and
+// is applied to the outermost level only.
+private const val BLOCKQUOTE_PADDING_VERTICAL_DP = 8f
 
 class BlockquoteRenderer(
   private val config: RendererConfig,
@@ -59,10 +67,57 @@ class BlockquoteRenderer(
     // Apply styling only to segments that are NOT nested quotes
     applySpansExcludingNested(builder, nestedRanges, start, end, createLineHeightSpan(style.lineHeight))
 
-    // Margins are only applied by the outermost (root) quote
+    // Inner vertical padding + margins are only applied by the outermost (root) quote.
     if (depth == 0) {
+      // Inner top/bottom padding via line-height expansion of the first/last line.
+      // BlockquoteSpan draws the background/border per line using the (expanded)
+      // line bounds, so the padding band is filled automatically. Added after the
+      // line-height spans so it expands the final metrics rather than being
+      // re-clamped by them.
+      val padding = (BLOCKQUOTE_PADDING_VERTICAL_DP * factory.context.resources.displayMetrics.density).toInt()
+      if (padding > 0) {
+        builder.setSpan(BlockquoteBoundaryPaddingSpan(padding), start, end, SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE)
+      }
+
       applyMarginTop(builder, start, style.marginTop)
       applyMarginBottom(builder, style.marginBottom)
+    }
+  }
+
+  /**
+   * Adds inner top/bottom padding to a blockquote by expanding the font metrics of
+   * its first and last lines, mirroring the code block's boundary padding. The
+   * span resolves its own range so it stays correct after the margin spacers shift
+   * the text.
+   */
+  private class BlockquoteBoundaryPaddingSpan(
+    private val padding: Int,
+  ) : LineHeightSpan {
+    override fun chooseHeight(
+      text: CharSequence,
+      startLine: Int,
+      endLine: Int,
+      spanstartv: Int,
+      v: Int,
+      fm: Paint.FontMetricsInt,
+    ) {
+      if (text !is Spanned) return
+
+      val spanStart = text.getSpanStart(this)
+      val spanEnd = text.getSpanEnd(this)
+
+      // First line of the blockquote: add space above the text.
+      if (startLine == spanStart) {
+        fm.ascent -= padding
+        fm.top -= padding
+      }
+
+      // Last line of the blockquote (handling a trailing newline): add space below.
+      val isLastLine = endLine == spanEnd || (spanEnd <= endLine && text[spanEnd - 1] == '\n')
+      if (isLastLine) {
+        fm.descent += padding
+        fm.bottom += padding
+      }
     }
   }
 
