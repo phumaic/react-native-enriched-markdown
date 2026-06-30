@@ -9,9 +9,11 @@ extern "C" {
 
 /// Resolves the link URL at the tap location.
 /// If a link is found, calls onLinkPress and returns YES.
-/// If no link is found, calls ENRMClearSelection and returns NO.
+/// Otherwise, if the tap falls inside the current selection and
+/// `onTapInsideSelection` is provided, calls it (preserving the selection) and
+/// returns YES. If neither, calls ENRMClearSelection and returns NO.
 BOOL ENRMHandleTapOnTextView(ENRMPlatformTextView *textView, ENRMTapRecognizer *recognizer,
-                             void (^onLinkPress)(NSString *url));
+                             void (^onLinkPress)(NSString *url), void (^_Nullable onTapInsideSelection)(void));
 
 #ifdef __cplusplus
 }
