@@ -79,15 +79,20 @@ static const CGFloat kBlockquotePaddingVertical = 8.0;
 
 #pragma mark - Inner Vertical Padding
 
-// Adds top and bottom inner padding by inserting spacer newlines that carry the
-// blockquote depth/background attributes, so the border-and-background drawing
-// extends over them (mirrors how the code block renderer pads its background).
+// Adds top and bottom inner padding inside the blockquote background.
+//
+// Top padding is a spacer newline carrying the blockquote depth/background
+// attributes (mirrors the code block renderer). Bottom padding extends the last
+// content line's fragment via paragraphSpacing instead of a trailing spacer:
+// a trailing newline becomes the layout's non-enumerated "extra line fragment"
+// when the blockquote is the document's last element, so the background/border
+// would not draw over it and the bottom padding would be lost.
 - (void)applyInnerVerticalPadding:(NSMutableAttributedString *)output
                             range:(NSRange)blockquoteRange
                           context:(RenderContext *)context
 {
   CGFloat padding = kBlockquotePaddingVertical;
-  if (padding <= 0) {
+  if (padding <= 0 || blockquoteRange.length == 0) {
     return;
   }
 
@@ -95,14 +100,20 @@ static const CGFloat kBlockquotePaddingVertical = 8.0;
   NSMutableParagraphStyle *contentStyle = getOrCreateParagraphStyle(output, blockquoteRange.location);
   NSWritingDirection writingDirection = contentStyle.baseWritingDirection;
 
-  // Bottom padding: appended right after the content (still inside the background).
-  NSUInteger bottomStart = NSMaxRange(blockquoteRange);
-  [output appendAttributedString:kNewlineAttributedString];
-  [output addAttributes:[self spacerAttributesWithPadding:padding
-                                          backgroundColor:backgroundColor
-                                         writingDirection:writingDirection
-                                                  context:context]
-                  range:NSMakeRange(bottomStart, 1)];
+  // Bottom padding: extend the last content paragraph's trailing spacing. It is
+  // part of an enumerated line fragment, so it is always drawn (even when the
+  // blockquote is the last element).
+  NSRange lastParagraph = [output.string paragraphRangeForRange:NSMakeRange(NSMaxRange(blockquoteRange) - 1, 1)];
+  if (lastParagraph.location < blockquoteRange.location) {
+    NSUInteger delta = blockquoteRange.location - lastParagraph.location;
+    lastParagraph.location = blockquoteRange.location;
+    lastParagraph.length = lastParagraph.length > delta ? lastParagraph.length - delta : 0;
+  }
+  if (lastParagraph.length > 0) {
+    NSMutableParagraphStyle *lastStyle = getOrCreateParagraphStyle(output, lastParagraph.location);
+    lastStyle.paragraphSpacing = padding;
+    [output addAttribute:NSParagraphStyleAttributeName value:lastStyle range:lastParagraph];
+  }
 
   // Top padding: inserted before the content (shifts content down by one char,
   // attributes already applied to the content move with it).
