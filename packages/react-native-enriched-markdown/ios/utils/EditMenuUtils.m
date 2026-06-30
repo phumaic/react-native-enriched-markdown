@@ -4,6 +4,39 @@
 #include <TargetConditionals.h>
 
 #if !TARGET_OS_OSX
+// Re-presents the text view's edit menu after a programmatic selection change.
+// UIKit dismisses the current menu once a menu action runs, so the presentation
+// is deferred to the next runloop turn and anchored to the new selection rect.
+// TODO: Remove API_AVAILABLE(ios(16.0)) guard when the minimum iOS deployment target in RN is bumped to 16.
+static void representEditMenuForSelection(UITextView *textView) API_AVAILABLE(ios(16.0))
+{
+  UIEditMenuInteraction *editMenuInteraction = nil;
+  for (id<UIInteraction> interaction in textView.interactions) {
+    if ([interaction isKindOfClass:[UIEditMenuInteraction class]]) {
+      editMenuInteraction = (UIEditMenuInteraction *)interaction;
+      break;
+    }
+  }
+  if (editMenuInteraction == nil) {
+    return;
+  }
+
+  UITextRange *selectedRange = textView.selectedTextRange;
+  if (selectedRange == nil) {
+    return;
+  }
+
+  // Anchor the menu to the start of the selection, matching how the system
+  // presents it when text is selected by hand.
+  CGRect selectionRect = [textView firstRectForRange:selectedRange];
+  CGPoint sourcePoint = CGPointMake(CGRectGetMidX(selectionRect), CGRectGetMinY(selectionRect));
+
+  dispatch_async(dispatch_get_main_queue(), ^{
+    UIEditMenuConfiguration *configuration = [UIEditMenuConfiguration configurationWithIdentifier:nil
+                                                                                      sourcePoint:sourcePoint];
+    [editMenuInteraction presentEditMenuWithConfiguration:configuration];
+  });
+}
 
 static NSString *const kMenuIdentifierStandardEdit = @"com.apple.menu.standard-edit";
 static NSString *const kActionIdentifierCopy = @"com.swmansion.enriched.markdown.copy";
@@ -51,8 +84,9 @@ static UIAction *_Nullable createCopyImageURLAction(NSArray<NSString *> *imageUR
 // Selects the entire content of the text view. iOS strips the system "Select All"
 // action when we rebuild the standard-edit submenu, so we recreate it here. The
 // text view is held weakly to avoid retaining it through the menu's lifetime.
+// TODO: Remove API_AVAILABLE(ios(16.0)) guard when the minimum iOS deployment target in RN is bumped to 16.
 static UIAction *_Nullable createSelectAllAction(ENRMPlatformTextView *_Nullable textView, NSAttributedString *text,
-                                                 NSRange range)
+                                                 NSRange range) API_AVAILABLE(ios(16.0))
 {
   // Nothing to add when there is no text view or the whole text is already selected.
   if (textView == nil || range.length >= text.length) {
@@ -75,6 +109,9 @@ static UIAction *_Nullable createSelectAllAction(ENRMPlatformTextView *_Nullable
                                  [strongTextView textRangeFromPosition:strongTextView.beginningOfDocument
                                                             toPosition:strongTextView.endOfDocument];
                              strongTextView.selectedTextRange = fullRange;
+                             // Re-present the menu so the user can immediately act on the
+                             // now fully-selected text (Copy, Copy as Markdown, etc.).
+                             representEditMenuForSelection(strongTextView);
                            }];
 }
 
