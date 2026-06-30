@@ -10,9 +10,10 @@
 static NSString *const kNestedInfoDepthKey = @"depth";
 static NSString *const kNestedInfoRangeKey = @"range";
 
-// Inner vertical padding between the blockquote background/border edges and the
-// text, so the quote does not look cramped. Applied to the outermost level only.
-static const CGFloat kBlockquotePaddingVertical = 8.0;
+// Inner vertical padding (points) is shared via ENRMBlockquotePaddingVertical in
+// BlockquoteBorder.h, so trailing-trim and measurement stay in sync. Applied to
+// the outermost level only.
+static const CGFloat kBlockquotePaddingVertical = ENRMBlockquotePaddingVertical;
 
 @implementation BlockquoteRenderer
 
