@@ -3,11 +3,16 @@
 #import "FontUtils.h"
 #import "MarkdownASTNode.h"
 #import "ParagraphStyleUtils.h"
+#import "RenderContext.h"
 #import "RendererFactory.h"
 #import "StyleConfig.h"
 
 static NSString *const kNestedInfoDepthKey = @"depth";
 static NSString *const kNestedInfoRangeKey = @"range";
+
+// Inner vertical padding between the blockquote background/border edges and the
+// text, so the quote does not look cramped. Applied to the outermost level only.
+static const CGFloat kBlockquotePaddingVertical = 8.0;
 
 @implementation BlockquoteRenderer
 
@@ -34,7 +39,7 @@ static NSString *const kNestedInfoRangeKey = @"range";
     return;
   }
 
-  [self applyStylingAndSpacing:output start:start end:end currentDepth:currentDepth];
+  [self applyStylingAndSpacing:output start:start end:end currentDepth:currentDepth context:context];
 }
 
 #pragma mark - Styling and Spacing
@@ -43,6 +48,7 @@ static NSString *const kNestedInfoRangeKey = @"range";
                          start:(NSUInteger)start
                            end:(NSUInteger)end
                   currentDepth:(NSInteger)currentDepth
+                       context:(RenderContext *)context
 {
   NSUInteger contentStart = start;
   if (currentDepth == 0) {
@@ -66,8 +72,63 @@ static NSString *const kNestedInfoRangeKey = @"range";
   [self reapplyNestedStyles:output nestedInfo:nestedInfo levelSpacing:levelSpacing];
 
   if (currentDepth == 0) {
+    [self applyInnerVerticalPadding:output range:blockquoteRange context:context];
     applyBlockSpacingAfter(output, [_config blockquoteMarginBottom]);
   }
+}
+
+#pragma mark - Inner Vertical Padding
+
+// Adds top and bottom inner padding by inserting spacer newlines that carry the
+// blockquote depth/background attributes, so the border-and-background drawing
+// extends over them (mirrors how the code block renderer pads its background).
+- (void)applyInnerVerticalPadding:(NSMutableAttributedString *)output
+                            range:(NSRange)blockquoteRange
+                          context:(RenderContext *)context
+{
+  CGFloat padding = kBlockquotePaddingVertical;
+  if (padding <= 0) {
+    return;
+  }
+
+  RCTUIColor *backgroundColor = [_config blockquoteBackgroundColor];
+  NSMutableParagraphStyle *contentStyle = getOrCreateParagraphStyle(output, blockquoteRange.location);
+  NSWritingDirection writingDirection = contentStyle.baseWritingDirection;
+
+  // Bottom padding: appended right after the content (still inside the background).
+  NSUInteger bottomStart = NSMaxRange(blockquoteRange);
+  [output appendAttributedString:kNewlineAttributedString];
+  [output addAttributes:[self spacerAttributesWithPadding:padding
+                                          backgroundColor:backgroundColor
+                                         writingDirection:writingDirection
+                                                  context:context]
+                  range:NSMakeRange(bottomStart, 1)];
+
+  // Top padding: inserted before the content (shifts content down by one char,
+  // attributes already applied to the content move with it).
+  [output insertAttributedString:kNewlineAttributedString atIndex:blockquoteRange.location];
+  [output addAttributes:[self spacerAttributesWithPadding:padding
+                                          backgroundColor:backgroundColor
+                                         writingDirection:writingDirection
+                                                  context:context]
+                  range:NSMakeRange(blockquoteRange.location, 1)];
+}
+
+- (NSDictionary *)spacerAttributesWithPadding:(CGFloat)padding
+                              backgroundColor:(RCTUIColor *)backgroundColor
+                             writingDirection:(NSWritingDirection)writingDirection
+                                      context:(RenderContext *)context
+{
+  NSMutableParagraphStyle *spacerStyle = [context spacerStyleWithHeight:padding spacing:0];
+  spacerStyle.baseWritingDirection = writingDirection;
+
+  NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+  attributes[NSParagraphStyleAttributeName] = spacerStyle;
+  attributes[BlockquoteDepthAttributeName] = @(0);
+  if (backgroundColor) {
+    attributes[BlockquoteBackgroundColorAttributeName] = backgroundColor;
+  }
+  return attributes;
 }
 
 #pragma mark - Nested Blockquote Handling
