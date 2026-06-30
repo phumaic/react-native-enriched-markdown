@@ -16,9 +16,11 @@
 #import "ENRMStyleMergingConfig.h"
 #import "ENRMUIKit.h"
 #import "ENRMWordsUtils.h"
+#import "EnrichedMarkdownTextInput+Internal.h"
 #import "InputStylePropsUtils.h"
 #import "ParagraphStyleUtils.h"
 #import "SelectionColorUtils.h"
+#import <QuartzCore/CABase.h>
 #import <React/RCTI18nUtil.h>
 #if TARGET_OS_OSX
 #import <React/RCTBackedTextInputDelegate.h>
@@ -60,6 +62,7 @@ using namespace facebook::react;
   BOOL _isApplyingFormatting;
   BOOL _isTextChanging;
   BOOL _emitMarkdown;
+  CFTimeInterval _lastTextChangeTime;
 
   ENRMPlaceholderLabel *_placeholderLabel;
 
@@ -89,6 +92,9 @@ using namespace facebook::react;
 
   ENRMWritingDirectionMode _writingDirectionMode;
   NSWritingDirection _resolvedLayoutDirection;
+
+  ENRMInputSelectionMenuConfig _inputSelectionMenuConfig;
+  ENRMFormatMenuConfig _formatMenuConfig;
 }
 
 #pragma mark - Fabric lifecycle
@@ -126,6 +132,9 @@ using namespace facebook::react;
     _writingDirectionMode = ENRMWritingDirectionModeFirstStrong;
     _resolvedLayoutDirection =
         [[RCTI18nUtil sharedInstance] isRTL] ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight;
+    _inputSelectionMenuConfig = (ENRMInputSelectionMenuConfig){.format = YES, .copyAsMarkdown = YES};
+    _formatMenuConfig = (ENRMFormatMenuConfig){
+        .bold = YES, .italic = YES, .underline = YES, .strikethrough = YES, .spoiler = YES, .link = YES};
 
     [self setupTextView];
 
@@ -349,6 +358,20 @@ using namespace facebook::react;
     _contextMenuItemTexts = ENRMContextMenuTextsFromItems(newViewProps.contextMenuItems);
     _contextMenuItemIcons = ENRMContextMenuIconsFromItems(newViewProps.contextMenuItems);
   }
+
+  _inputSelectionMenuConfig = (ENRMInputSelectionMenuConfig){
+      .format = newViewProps.selectionMenuConfig.format,
+      .copyAsMarkdown = newViewProps.selectionMenuConfig.copyAsMarkdown,
+  };
+
+  _formatMenuConfig = (ENRMFormatMenuConfig){
+      .bold = newViewProps.formatMenuConfig.bold,
+      .italic = newViewProps.formatMenuConfig.italic,
+      .underline = newViewProps.formatMenuConfig.underline,
+      .strikethrough = newViewProps.formatMenuConfig.strikethrough,
+      .spoiler = newViewProps.formatMenuConfig.spoiler,
+      .link = newViewProps.formatMenuConfig.link,
+  };
 
   if (newViewProps.mentionIndicators != oldViewProps.mentionIndicators) {
     NSMutableArray<NSString *> *indicators = [NSMutableArray array];
@@ -738,6 +761,7 @@ using namespace facebook::react;
   }
 
   [self applyFormatting];
+  [self syncTypingAttributesWithPendingStyles];
   [self emitFormattingChanged];
 }
 
@@ -939,6 +963,57 @@ using namespace facebook::react;
     return YES;
   }
   return inRange;
+}
+
+- (void)syncTypingAttributesWithPendingStyles
+{
+  UIFontDescriptorSymbolicTraits traits = 0;
+  if ([_pendingStyles containsObject:@(ENRMInputStyleTypeStrong)]) {
+    traits |= UIFontDescriptorTraitBold;
+  }
+  if ([_pendingStyles containsObject:@(ENRMInputStyleTypeEmphasis)]) {
+    traits |= UIFontDescriptorTraitItalic;
+  }
+
+  NSMutableDictionary *attrs = [_textView.typingAttributes mutableCopy];
+  attrs[NSFontAttributeName] = [_formatterStyle fontForTraits:traits];
+  _textView.typingAttributes = attrs;
+}
+
+- (void)resetPendingStylesForSelectionChange
+{
+  // Skip system-driven selection adjustments (e.g., predictive text) that fire
+  // immediately after a text edit.
+  static const CFTimeInterval kPostEditGracePeriod = 0.1;
+  BOOL isPostEditAdjustment =
+      (_lastTextChangeTime > 0 && (CACurrentMediaTime() - _lastTextChangeTime) < kPostEditGracePeriod);
+  if (isPostEditAdjustment) {
+    return;
+  }
+  [_pendingStyles removeAllObjects];
+  [_pendingStyleRemovals removeAllObjects];
+  [self rebuildPendingStylesFromContext];
+  [self syncTypingAttributesWithPendingStyles];
+}
+
+- (void)rebuildPendingStylesFromContext
+{
+  NSUInteger cursor = _textView.selectedRange.location;
+  if (_textView.selectedRange.length > 0 || cursor == 0) {
+    return;
+  }
+
+  static const ENRMInputStyleType inlineStyles[] = {
+      ENRMInputStyleTypeStrong,        ENRMInputStyleTypeEmphasis, ENRMInputStyleTypeUnderline,
+      ENRMInputStyleTypeStrikethrough, ENRMInputStyleTypeSpoiler,
+  };
+
+  for (NSUInteger i = 0; i < sizeof(inlineStyles) / sizeof(inlineStyles[0]); i++) {
+    ENRMInputStyleType type = inlineStyles[i];
+    if ([_formattingStore isStyleAdjacentBefore:type position:cursor]) {
+      [_pendingStyles addObject:@(type)];
+    }
+  }
 }
 
 #pragma mark - Event emitters
@@ -1177,6 +1252,16 @@ using namespace facebook::react;
 - (NSArray<NSString *> *)contextMenuItemIcons
 {
   return _contextMenuItemIcons ?: @[];
+}
+
+- (ENRMInputSelectionMenuConfig)inputSelectionMenuConfig
+{
+  return _inputSelectionMenuConfig;
+}
+
+- (ENRMFormatMenuConfig)formatMenuConfig
+{
+  return _formatMenuConfig;
 }
 
 - (void)emitContextMenuItemPress:(NSString *)itemText
@@ -1446,6 +1531,7 @@ using namespace facebook::react;
   }
   [self handleTextChanged];
   _isTextChanging = NO;
+  _lastTextChangeTime = CACurrentMediaTime();
   _lastSelectedRange = textView.selectedRange;
 }
 
@@ -1470,12 +1556,15 @@ using namespace facebook::react;
     return;
   }
 
+  if (ENRMHasMarkedText(_textView)) {
+    return;
+  }
+
   BOOL selectionMoved =
       newSelection.location != previousSelection.location || newSelection.length != previousSelection.length;
 
   if (selectionMoved) {
-    [_pendingStyles removeAllObjects];
-    [_pendingStyleRemovals removeAllObjects];
+    [self resetPendingStylesForSelectionChange];
   }
 
   [self manageSelectionBasedChanges];
@@ -1543,19 +1632,30 @@ using namespace facebook::react;
   }
   [self handleTextChanged];
   _isTextChanging = NO;
+  _lastTextChangeTime = CACurrentMediaTime();
   _lastSelectedRange = _textView.selectedRange;
 }
 
 - (void)textInputDidChangeSelection
 {
-  _lastSelectedRange = _textView.selectedRange;
+  NSRange newSelection = _textView.selectedRange;
+  NSRange previousSelection = _lastSelectedRange;
+  _lastSelectedRange = newSelection;
 
   if (_isApplyingFormatting || _isTextChanging) {
     return;
   }
 
-  [_pendingStyles removeAllObjects];
-  [_pendingStyleRemovals removeAllObjects];
+  if (ENRMHasMarkedText(_textView)) {
+    return;
+  }
+
+  BOOL selectionMoved =
+      newSelection.location != previousSelection.location || newSelection.length != previousSelection.length;
+
+  if (selectionMoved) {
+    [self resetPendingStylesForSelectionChange];
+  }
 
   [self emitOnChangeSelection];
   [self updateActiveMention];

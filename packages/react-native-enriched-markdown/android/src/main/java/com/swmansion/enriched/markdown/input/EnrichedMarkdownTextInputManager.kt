@@ -31,6 +31,8 @@ import com.swmansion.enriched.markdown.input.events.OnRequestMarkdownResultEvent
 import com.swmansion.enriched.markdown.input.events.OnStartMentionEvent
 import com.swmansion.enriched.markdown.input.layout.InputMeasurementStore
 import com.swmansion.enriched.markdown.input.model.StyleType
+import com.swmansion.enriched.markdown.input.toolbar.FormatMenuConfig
+import com.swmansion.enriched.markdown.input.toolbar.InputSelectionMenuConfig
 import com.swmansion.enriched.markdown.utils.input.BorderPropsApplicator
 import com.swmansion.enriched.markdown.utils.input.MarkdownStyleParser
 
@@ -261,6 +263,44 @@ class EnrichedMarkdownTextInputManager :
     if (view == null) return
     val items = (0 until (value?.size() ?: 0)).mapNotNull { value?.getMap(it)?.getString("text") }
     view.setContextMenuItems(items)
+  }
+
+  @ReactProp(name = "selectionMenuConfig")
+  override fun setSelectionMenuConfig(
+    view: EnrichedMarkdownTextInputView?,
+    value: ReadableMap?,
+  ) {
+    if (view == null) return
+    view.contextMenu.selectionMenuConfig =
+      if (value == null) {
+        InputSelectionMenuConfig()
+      } else {
+        InputSelectionMenuConfig(
+          format = value.getBoolean("format"),
+          copyAsMarkdown = value.getBoolean("copyAsMarkdown"),
+        )
+      }
+  }
+
+  @ReactProp(name = "formatMenuConfig")
+  override fun setFormatMenuConfig(
+    view: EnrichedMarkdownTextInputView?,
+    value: ReadableMap?,
+  ) {
+    if (view == null) return
+    view.contextMenu.formatMenuConfig =
+      if (value == null) {
+        FormatMenuConfig()
+      } else {
+        FormatMenuConfig(
+          bold = value.getBoolean("bold"),
+          italic = value.getBoolean("italic"),
+          underline = value.getBoolean("underline"),
+          strikethrough = value.getBoolean("strikethrough"),
+          spoiler = value.getBoolean("spoiler"),
+          link = value.getBoolean("link"),
+        )
+      }
   }
 
   @ReactProp(name = "linkRegex")

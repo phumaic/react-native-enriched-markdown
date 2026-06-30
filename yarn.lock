@@ -3365,7 +3365,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@enriched-markdown/core@workspace:packages/core":
+"@enriched-markdown/core@workspace:*, @enriched-markdown/core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@enriched-markdown/core@workspace:packages/core"
   languageName: unknown
@@ -9988,6 +9988,12 @@ __metadata:
   languageName: node
   linkType: hard
 
+"enriched-markdown-android-example@workspace:apps/android-example":
+  version: 0.0.0-use.local
+  resolution: "enriched-markdown-android-example@workspace:apps/android-example"
+  languageName: unknown
+  linkType: soft
+
 "entities@npm:^4.2.0, entities@npm:^4.4.0":
   version: 4.5.0
   resolution: "entities@npm:4.5.0"
@@ -15868,13 +15874,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-enriched-markdown-example@workspace:apps/example":
+"react-native-enriched-markdown-example@workspace:apps/react-native-example":
   version: 0.0.0-use.local
-  resolution: "react-native-enriched-markdown-example@workspace:apps/example"
+  resolution: "react-native-enriched-markdown-example@workspace:apps/react-native-example"
   dependencies:
     "@babel/core": "npm:^7.25.2"
     "@babel/preset-env": "npm:^7.25.3"
     "@babel/runtime": "npm:^7.25.0"
+    "@enriched-markdown/core": "workspace:*"
     "@gorhom/bottom-sheet": "npm:^5.2.14"
     "@react-native-async-storage/async-storage": "npm:1.23.1"
     "@react-native-community/cli": "npm:20.1.0"
