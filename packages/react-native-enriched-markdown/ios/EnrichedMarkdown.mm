@@ -106,6 +106,7 @@ static char kENRMSegmentFadeAnimatorKey;
   NSArray<NSString *> *_contextMenuItemTexts;
   NSArray<NSString *> *_contextMenuItemIcons;
   ENRMSelectionMenuConfig _selectionMenuConfig;
+  ENRMSelectionMenuLabels _selectionMenuLabels;
 
   ENRMSpoilerOverlay _spoilerOverlay;
 
@@ -388,6 +389,27 @@ static char kENRMSegmentFadeAnimatorKey;
   }
 }
 
+// Table and math views cache the copy labels at creation time, so re-push them
+// on prop updates (e.g. a language change without a remount) to avoid stale
+// labels. Only the copy/copy-as-markdown labels apply to these block menus.
+- (void)pushSelectionMenuLabelsToSegments
+{
+  for (RCTUIView *segment in _segmentViews) {
+    if ([segment isKindOfClass:[TableContainerView class]]) {
+      TableContainerView *tableView = (TableContainerView *)segment;
+      tableView.copyLabel = _selectionMenuLabels.copyLabel;
+      tableView.copyAsMarkdownLabel = _selectionMenuLabels.copyAsMarkdownLabel;
+    }
+#if ENRICHED_MARKDOWN_MATH
+    else if ([segment isKindOfClass:[ENRMMathContainerView class]]) {
+      ENRMMathContainerView *mathView = (ENRMMathContainerView *)segment;
+      mathView.copyLabel = _selectionMenuLabels.copyLabel;
+      mathView.copyAsMarkdownLabel = _selectionMenuLabels.copyAsMarkdownLabel;
+    }
+#endif
+  }
+}
+
 - (void)requestHeightUpdate
 {
   ENRMRequestHeightUpdate<EnrichedMarkdownState>(_state, _heightUpdateCounter, self);
@@ -600,6 +622,8 @@ static char kENRMSegmentFadeAnimatorKey;
   tableView.enableLinkPreview = _enableLinkPreview;
   tableView.writingDirectionMode = _writingDirectionMode;
   tableView.resolvedLayoutDirection = _resolvedLayoutDirection;
+  tableView.copyLabel = _selectionMenuLabels.copyLabel;
+  tableView.copyAsMarkdownLabel = _selectionMenuLabels.copyAsMarkdownLabel;
 
   __weak EnrichedMarkdown *weakSelf = self;
 
@@ -636,6 +660,8 @@ static char kENRMSegmentFadeAnimatorKey;
 - (ENRMMathContainerView *)createMathViewForSegment:(ENRMMathSegment *)mathSegment
 {
   ENRMMathContainerView *mathView = [[ENRMMathContainerView alloc] initWithConfig:_config];
+  mathView.copyLabel = _selectionMenuLabels.copyLabel;
+  mathView.copyAsMarkdownLabel = _selectionMenuLabels.copyAsMarkdownLabel;
   [mathView applyLatex:mathSegment.latex];
   return mathView;
 }
@@ -788,10 +814,11 @@ static char kENRMSegmentFadeAnimatorKey;
     _contextMenuItemIcons = ENRMContextMenuIconsFromItems(newViewProps.contextMenuItems);
   }
 
-  _selectionMenuConfig = (ENRMSelectionMenuConfig){
-      .copyAsMarkdown = newViewProps.selectionMenuConfig.copyAsMarkdown,
-      .copyImageURL = newViewProps.selectionMenuConfig.copyImageUrl,
-  };
+  _selectionMenuLabels = ENRMParseSelectionMenuLabels(newViewProps.selectionMenuConfig);
+  _selectionMenuConfig =
+      ENRMBuildSelectionMenuConfig(_selectionMenuLabels, newViewProps.selectionMenuConfig.copyAsMarkdown,
+                                   newViewProps.selectionMenuConfig.copyImageUrl);
+  [self pushSelectionMenuLabelsToSegments];
 
   if (newViewProps.spoilerOverlay != oldViewProps.spoilerOverlay) {
     NSString *modeStr = [[NSString alloc] initWithUTF8String:newViewProps.spoilerOverlay.c_str()];
